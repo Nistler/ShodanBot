@@ -1,32 +1,41 @@
 import { bot, openAi } from './entities/index.js';
+import { updateContext } from './shared/utils/updateContext.js';
 
 const definedMessages = ['/about'];
 
-bot.on('message', async (msg) => {
-  if (!definedMessages.includes(msg.text)) {
-    const messageText = msg.text;
+const conversationContext = {};
 
-    const chatId = msg.chat.id;
+bot.on('message', async (ctx) => {
+  const userMessage = ctx.update.message.text;
 
+  if (!definedMessages.includes(userMessage)) {
+    const messageText = userMessage;
+
+    console.log(userMessage);
     try {
+      const userId = ctx.update.message.from.id;
+      const requestMessage = {content: messageText, role: 'user'};
+
+      updateContext(conversationContext, userId, requestMessage);
+
       const response = await openAi.createChatCompletion({
         model: 'gpt-3.5-turbo',
-        messages: [{content: messageText, role: 'user'}],
+        messages: conversationContext[userId],
       })
 
-      const responseMessage  = response.data.choices[0].message.content;
+      const responseText  = response.data.choices[0].message.content;
+      const responseMessage = {content: responseText, role: 'assistant'};
 
-      await bot.sendMessage(chatId, responseMessage);
+      updateContext(conversationContext, userId, responseMessage);
+
+      console.log(conversationContext);
+
+      await ctx.reply(responseText);
     } catch (error) {
       console.log('error', error);
-      await bot.sendMessage(chatId, 'Ooooops, something went wrong!');
+      await ctx.reply('Ooooops, something went wrong!');
     }
   }
 });
 
-bot.onText(/\/about/, async msg => {
-  const chatId = msg.chat.id;
-  await bot.sendMessage(chatId, 'I am Shodan, your personal assistant bot.');
-});
-
-bot.on("polling_error", console.log);
+bot.launch();
